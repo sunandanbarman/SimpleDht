@@ -84,6 +84,7 @@ public class OnTestClickListener implements OnClickListener {
 					mContentResolver.insert(mUri, mContentValues[i]);
 				}
 			} catch (Exception e) {
+				e.printStackTrace();
 				Log.e(TAG, e.toString());
 				return false;
 			}
@@ -98,7 +99,7 @@ public class OnTestClickListener implements OnClickListener {
 					String val = (String) mContentValues[i].get(VALUE_FIELD);
 
 					Cursor resultCursor = mContentResolver.query(mUri, null,
-							"key=?", new String[]{key}, null);
+							key,null, null);
 					if (resultCursor == null) {
 						Log.e(TAG, "Result null");
 						throw new Exception();

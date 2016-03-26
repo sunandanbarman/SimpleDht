@@ -40,4 +40,31 @@
         android:maxLines="17"
         android:scrollbars="vertical" />
 
+    <Button
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Send"
+        android:id="@+id/btnSend"
+        android:layout_alignParentBottom="true"
+        android:layout_toStartOf="@+id/btnClear" />
+
+    <EditText
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/editText"
+        android:layout_alignTop="@+id/btnSend"
+        android:layout_alignParentStart="true"
+        android:layout_toStartOf="@+id/btnSend"
+        android:layout_alignParentBottom="true"
+        android:layout_alignEnd="@+id/btnGDump" />
+
+    <Button
+        style="?android:attr/buttonStyleSmall"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="clear"
+        android:id="@+id/btnClear"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentEnd="true" />
+
 </RelativeLayout>

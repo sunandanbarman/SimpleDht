@@ -13,7 +13,7 @@ import android.widget.TextView;
  * Created by sunandan on 3/18/16.
  */
 public class LDump implements View.OnClickListener {
-    private static final String TAG = LDump.class.getName();
+    private static String TAG;
     private static final String KEY_FIELD = "key";
     private static final String VALUE_FIELD = "value";
     private static final String LDumpSelection = "@";
@@ -25,9 +25,11 @@ public class LDump implements View.OnClickListener {
 
 
     public LDump(TextView _tv, ContentResolver _cr) {
+        TAG = SimpleDhtActivity.TAG;
         mTextView = _tv;
         mContentResolver = _cr;
         mUri = buildUri("content", "edu.buffalo.cse.cse486586.simpledht.provider");
+
     }
 
     private Uri buildUri(String scheme, String authority) {
@@ -42,18 +44,16 @@ public class LDump implements View.OnClickListener {
         new Task().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
 
-    private class Task extends AsyncTask<Void, Void, Void> {
-
-
-        @Override
-        protected Void doInBackground(Void... params) {
-            testQuery();
-            return null;
+    private class Task extends AsyncTask<Void, String, Void> {
+        protected void onProgressUpdate(String...strings) {
+            mTextView.append(strings[0]);
+            mTextView.append("\n");
+            return;
         }
-    }
 
-    private boolean testQuery() {
-        try {
+
+        private boolean testQuery() {
+            try {
 
                 Cursor resultCursor = mContentResolver.query(mUri, null,
                         LDumpSelection, null, null);
@@ -72,32 +72,29 @@ public class LDump implements View.OnClickListener {
 
                 resultCursor.moveToFirst();
 
-
-                /*if (!(resultCursor.isFirst() && resultCursor.isLast()))
-                {
-                    Log.e(TAG, "Wrong number of rows");
-                    resultCursor.close();
-                    throw new Exception();
-                }*/
+                while(!resultCursor.isAfterLast()) {
+                    String key = resultCursor.getString(0);
+                    String val = resultCursor.getString(1);
+                    Log.e(TAG, " key :" + key + " value :" + val);
+                    publishProgress(key + "=" + val);
+                    resultCursor.moveToNext();
+                }
                 Log.e(TAG, String.valueOf(resultCursor.getCount()));
 
-                /*String returnKey = resultCursor.getString(keyIndex);
-                String returnValue = resultCursor.getString(valueIndex);*/
-/*
-                if (!(returnKey.equals(key) && returnValue.equals(val)))
-                {
-                    Log.e(TAG, "(key, value) pairs don't match\n");
-                    resultCursor.close();
-                    throw new Exception();
-                }
-*/
-                //mTextView.append(returnKey + " : " + returnValue);
                 resultCursor.close();
-        } catch (Exception e) {
-            return false;
+            } catch (Exception e) {
+                return false;
+            }
+
+            return true;
         }
 
-        return true;
+        @Override
+        protected Void doInBackground(Void... params) {
+            testQuery();
+            return null;
+        }
     }
+
 
 }
