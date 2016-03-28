@@ -43,6 +43,8 @@ public class SimpleDhtProvider extends ContentProvider {
     public static final int[] AVD_ID         = {5554,5556,5558,5560,5562};
     public static final int[] REMOTE_PORT    = {11108,11112,11116,11120,11124};
     public static SimpleDhtProvider singleInstance;
+    public static Map<String,String> hashWithPortMap;
+    public static Map<String,String> portWithHashMap;
 
     public ChordList<String> chordList;
 
@@ -67,10 +69,7 @@ public class SimpleDhtProvider extends ContentProvider {
         Log.e(TAG,"predHash " + predHash + " node_id " + node_id);
         Log.e(TAG," hashCompare :" + hashKey.compareTo(predHash));
         Log.e(TAG," hashCompare :" + hashKey.compareTo(node_id));
-        if (hashKey.compareTo(predHash)  >= 1 && ( hashKey.compareTo(node_id)  <= 0) ) {
-            Log.e(TAG,"In doLookup found true");
-            return true;
-        }
+
         if (predHash.equalsIgnoreCase(succHash)) {
             Log.e(TAG,"predHash == succHash");
             if (hashKey.compareTo(predHash) >= 1 && hashKey.compareTo(succHash) >= 1) { // hashKey greater than both
@@ -78,6 +77,45 @@ public class SimpleDhtProvider extends ContentProvider {
                 return true;
             }
         }
+        if (hashKey.compareTo(predHash) > 0 && hashKey.compareTo(node_id) <= 0) {
+            return true;
+        }
+        if (hashKey.compareTo(node_id)> 0 && hashKey.compareTo(predHash) > 0 && node_id.compareTo(predHash) < 0) { //first node, hashkey greater than all nodes
+            return  true;
+        }
+        if (hashKey.compareTo(node_id) < 0 && hashKey.compareTo(predHash) <0 && node_id.compareTo(predHash) < 0 ) { //first node, hashKey lesser than all nodes
+            return true;
+        }
+        /*if (hashKey.compareTo(succHash) < 0 && hashKey.compareTo(node_id) >= 0) {
+            return true;
+        }
+        if (node_id.compareTo(succHash) > 0) {
+            return true;
+        }*/
+/*
+        if (hashKey.compareTo(predHash)  > 0 && ( hashKey.compareTo(node_id)  <= 0) ) {
+            Log.e(TAG,"In doLookup found true 1.1");
+            return true;
+        }
+
+        if (hashKey.compareTo(node_id) > 0 && hashKey.compareTo(succHash) >  0 && node_id.compareTo(succHash) < 0) {
+
+        }
+*/
+/*        if (hashKey.compareTo(node_id) > 0 && hashKey.compareTo(succHash) <= 0) {
+            Log.e(TAG,"insert to be done at successor " + succPort);
+
+        }*/
+/*
+        if (hashKey.compareTo(predHash) > 0 && predHash.compareTo(node_id) >0 ) {
+            Log.e(TAG,"In doLookup found true 1.2");
+            return true;
+        }
+        if (hashKey.compareTo(node_id) <= 0 && predHash.compareTo(node_id) >0 ) {
+            Log.e(TAG,"In doLookup found true 1.3");
+            return true;
+        }
+*/
         /*if (isFirstNode()) {
             Log.e(TAG,"This is the first node !");
             if (hashKey.compareTo(predHash) > 0) {
@@ -140,13 +178,9 @@ public class SimpleDhtProvider extends ContentProvider {
         Log.e(TAG,"insertBegin, key " + key);
         Log.e(TAG,"insertBegin, value " + value);
         String hashKey = "";
-        try {
-            hashKey = genHash(key);
-            Log.e(TAG,"hashKey in insert " + hashKey);
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-            return null;
-        }
+
+        hashKey = genHash(key);
+        Log.e(TAG,"hashKey in insert " + hashKey);
         //synchronized (this)
         {
             Log.e(TAG,"Content values -->" + values.get(SimpleDhtActivity.KEY_FIELD) +  " = "  + values.get(SimpleDhtActivity.VALUE_FIELD));
@@ -194,6 +228,7 @@ public class SimpleDhtProvider extends ContentProvider {
                     port = myPort;
                 }
                 Log.e(TAG,"succPort " + String.valueOf(succPort));
+                Log.e(TAG,"predPort " + String.valueOf(predPort));
                 Message message = new Message(key, value, hashKey, INSERT_LOOKUP, port, String.valueOf(succPort), "dummy", "dummy");
                 new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, message);
                 msgSentForLookup.add(new StringBuilder(key).append(":").append(value).toString());
@@ -253,12 +288,15 @@ public class SimpleDhtProvider extends ContentProvider {
     }
     private void sendAliveMessageToAVD0() {
         Log.e(TAG, "sendAliveMessageToAVD0 by " + myPort);
+        String hash = genHash(String.valueOf(Integer.valueOf(myPort)/2));
+
         Message message = new Message("key","value","hash",ALIVE,myPort,String.valueOf(NODE_JOINER_PORT),"dummy","dummy");
         new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,message);
     }
     public void sendNodeAddedMessage(Message message) {
         Log.e(TAG, "Node " + message.remotePort + " is added. To send ACK to it");
         new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, message);
+/*
         if (chordList.size() >2 ) //inform the pred of new joinee to update its successor as well
         {
             Message temp = new Message(message);
@@ -266,6 +304,18 @@ public class SimpleDhtProvider extends ContentProvider {
             temp.succPort   = message.remotePort;
             temp.remotePort = chordList.getPredecessor(message.remotePort);
             new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,temp);
+        }
+*/
+    }
+
+    private void createHashWithPortMap() {
+        hashWithPortMap = new HashMap<String, String>();
+        portWithHashMap = new HashMap<String, String>();
+        String hash = "";
+        for(int port : REMOTE_PORT) {
+            hash = genHash(String.valueOf(port/2));
+            hashWithPortMap.put(hash,String.valueOf(port));
+            portWithHashMap.put(String.valueOf(port),hash);
         }
     }
     @Override
@@ -276,19 +326,24 @@ public class SimpleDhtProvider extends ContentProvider {
         msgSentForLookup = new HashSet<String>();
         // TODO Auto-generated method stub
         createServerSocket();
+        //Log.e(TAG,genHash("kX8dszTvBysWo4Hv5juIKeXucRWt09bO"));
         //getPredAndSucc();
-        if (myPort.equalsIgnoreCase(String.valueOf(NODE_JOINER_PORT))) {
-            predHash = "";
-            succHash = "";
-            chordList = new ChordList<String>();
-            chordList.add(myPort);
+        if (singleInstance == null) {
+            singleInstance = this;
         }
 
 
-        try {
 
             node_id = genHash(String.valueOf(Integer.valueOf(myPort) / 2));
             Log.e(TAG, "node_id " + node_id);
+            if (myPort.equalsIgnoreCase(String.valueOf(NODE_JOINER_PORT))) {
+                createHashWithPortMap();
+                predHash = "";
+                succHash = "";
+                chordList = new ChordList<String>();
+                chordList.add(portWithHashMap.get(myPort));
+            }
+
 /*
             if (predAllInRing.size() > 0 ) {
                 predHash = genHash(String.valueOf(Integer.valueOf(predAllInRing.get(myPort)) / 2 ));
@@ -321,13 +376,9 @@ public class SimpleDhtProvider extends ContentProvider {
                 Log.e(TAG,"key " + entry.getKey() + " : " + entry.getValue());
             }*/
 
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-        }
 
-        if (singleInstance == null) {
-            singleInstance = this;
-        }
+
+
        /* try {
             //getPredAndSucc();
             Log.e(TAG, "predHash :" + predWithHash.get(predPort));
@@ -380,17 +431,20 @@ public class SimpleDhtProvider extends ContentProvider {
         Cursor c;
         boolean bReturnFromLocalOnly = false;
         String hashKey;
-        try {
-            hashKey = genHash(selection);
-            if (!doLookup(hashKey)) {
-                Message message = new Message();
-                new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,message);
-                Thread.sleep(1500);
+        if (!selection.equalsIgnoreCase("@")) {
+            try {
+
+                hashKey = genHash(selection);
+                if (!doLookup(hashKey)) {
+                    Message message = new Message();
+                    new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,message);
+                    Thread.sleep(1500);
+                }
+            }  catch(InterruptedException e) {
+                e.printStackTrace();
             }
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-        } catch(InterruptedException e) {
-            e.printStackTrace();
+        } else {
+            Log.e(TAG,"query type is LDUMP");
         }
         // TODO Auto-generated method stub
         //synchronized(this)
@@ -428,14 +482,19 @@ public class SimpleDhtProvider extends ContentProvider {
         return 0;
     }
     /*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%*/
-    private String genHash(String input) throws NoSuchAlgorithmException {
-        MessageDigest sha1 = MessageDigest.getInstance("SHA-1");
-        byte[] sha1Hash = sha1.digest(input.getBytes());
-        Formatter formatter = new Formatter();
-        for (byte b : sha1Hash) {
-            formatter.format("%02x", b);
+    public String genHash(String input) {
+        try {
+            MessageDigest sha1 = MessageDigest.getInstance("SHA-1");
+            byte[] sha1Hash = sha1.digest(input.getBytes());
+            Formatter formatter = new Formatter();
+            for (byte b : sha1Hash) {
+                formatter.format("%02x", b);
+            }
+            return formatter.toString();
+        } catch(NoSuchAlgorithmException e) {
+            e.printStackTrace();
+            return null;
         }
-        return formatter.toString();
     }
 
     public static SimpleDhtProvider getInstance() {
@@ -445,12 +504,9 @@ public class SimpleDhtProvider extends ContentProvider {
         predPort = Integer.valueOf(predPort_);
         succPort = Integer.valueOf(succPort_);
 
-        try {
-            predHash = genHash(String.valueOf(predPort / 2));
-            succHash = genHash(String.valueOf(succPort / 2));
-        } catch(NoSuchAlgorithmException e) {
-            e.printStackTrace();
-        }
+        predHash = portWithHashMap.get(predPort_);
+        succHash = portWithHashMap.get(succPort_);
+
     }
     public void setPredAndSucc(Message message) {
         if (message.messageType.equals(NODE_ADDED))
@@ -459,12 +515,8 @@ public class SimpleDhtProvider extends ContentProvider {
             predPort = Integer.valueOf(message.predPort);
             succPort = Integer.valueOf(message.succPort);
             Log.e("setPredAndSucc","updating pred and succ " + predPort + " : " + succPort);
-            try {
-                predHash = genHash(String.valueOf(predPort / 2));
-                succHash = genHash( String.valueOf(succPort /2) );
-            } catch (NoSuchAlgorithmException e) {
-                e.printStackTrace();
-            }
+            predHash = genHash(String.valueOf(predPort / 2));
+            succHash = genHash( String.valueOf(succPort /2) );
             Log.e(TAG,"predHash and succHash set in setPredAndSucc " + predHash + " : " + succHash);
         }
         else {

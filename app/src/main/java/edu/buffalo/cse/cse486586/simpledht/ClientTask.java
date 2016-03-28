@@ -43,7 +43,7 @@ public class ClientTask extends AsyncTask<Message,Void,Void> {
         try {
             socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
                     Integer.valueOf(message.remotePort));
-
+            Log.e(TAG,"LocalSocketAddress :" + socket.getLocalSocketAddress().toString());
             socket.setSoTimeout(SimpleDhtProvider.TIMEOUT);
             outputStream    = socket.getOutputStream();
             dataOutputStream= new DataOutputStream(outputStream);

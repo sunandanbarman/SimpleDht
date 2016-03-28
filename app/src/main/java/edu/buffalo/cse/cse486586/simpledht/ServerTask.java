@@ -13,20 +13,74 @@ import java.io.StreamCorruptedException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.TreeSet;
 
 /**
  * Created by sunandan on 3/19/16.
  */
     /*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%*/
 public class ServerTask extends AsyncTask<ServerSocket, String, Void> {
-    public void printTreeSet() {
+    public void printTreeSet(ChordList<String> treeSet) {
         Log.e("printTreeSet","******  begin ******");
-        for(String port : SimpleDhtProvider.singleInstance.chordList) {
+        for(String port : treeSet) {
             Log.e("printTreeSet","port " + port);
         }
         Log.e("printTreeSet","******* end  *****");
     }
+    private HashSet<String> getNodesWithNewPredAndSucc(ChordList<String> oldChordList) {
+        HashSet<String> result = new HashSet<String>();
+        String tempPred, tempSucc;
 
+        Log.e("getNodesWithNewPredSucc","***************** begins *********");
+        for(String s:oldChordList) {
+            Log.e("getNodesWithNewPredSucc",s);
+        }
+        Log.e("getNodesWithNewPredSucc","***************** ends   **********");
+        for(String node :SimpleDhtProvider.getInstance().chordList) {
+            Log.e("getNodesWithNewPredSucc", "node =" + node);
+            String port = SimpleDhtProvider.getInstance().hashWithPortMap.get(node);
+            //String avdID = SimpleDhtProvider.getInstance().hashWithPortMap.get(node);
+            Log.e("getNodesWithNewPredSucc"," port =" + port);
+            if (!oldChordList.contains(node))
+            {
+
+                Log.e("getNodesWithNewPredSucc","New node " +  port + " found");
+                result.add(node);
+            } else {
+                tempSucc = oldChordList.getSuccessor(node);
+                tempPred = oldChordList.getPredecessor(node);
+
+                if (!tempSucc.equalsIgnoreCase(SimpleDhtProvider.getInstance().chordList.getSuccessor(node))) { //successor is different
+                    Log.e("getNodesWithNewPredSucc",port + " has new successor ");
+                    result.add(node);
+                }
+                if (!tempPred.equalsIgnoreCase(SimpleDhtProvider.getInstance().chordList.getPredecessor(node))) { //pred is different
+                    Log.e("getNodesWithNewPredSucc",port + " has new predecessor ");
+                    result.add(node);
+                }
+            }
+        }
+        /*for(String node : oldChordList) {
+            String avdID = SimpleDhtProvider.getInstance().hashWithPortMap.get(node);
+            Log.e("getNodesWithNewPredSucc","avdID in =" + avdID);
+            tempSucc = SimpleDhtProvider.getInstance().chordList.getSuccessor(avdID);
+            tempPred = SimpleDhtProvider.getInstance().chordList.getPredecessor(avdID);
+
+            if (!tempSucc.equalsIgnoreCase(oldChordList.getSuccessor(avdID))) { //successor is different
+                Log.e("getNodesWithNewPredSucc",avdID + " has new successor ");
+                result.add(String.valueOf(Integer.valueOf(avdID)*2));
+            }
+            if (!tempPred.equalsIgnoreCase(oldChordList.getPredecessor(avdID))) { //pred is different
+                Log.e("getNodesWithNewPredSucc",avdID + " has new predecessor ");
+                result.add(String.valueOf(Integer.valueOf(avdID)*2));
+            }
+        }*/
+        return result;
+    }
     /**
      * Does a lookup on the message's hashkey and determines whether the message to this node, or to forward to successor node for further lookups
      * @return
@@ -60,20 +114,44 @@ public class ServerTask extends AsyncTask<ServerSocket, String, Void> {
                     if (message.messageType.equalsIgnoreCase(SimpleDhtProvider.ALIVE)) {
                         Log.e(TAG, "ALIVE message found from " + message.originPort);
                         Log.e(TAG, "to add " + message.originPort);
-                        Log.e(TAG, String.valueOf(SimpleDhtProvider.getInstance().chordList.add(String.valueOf(message.originPort))));
-                        printTreeSet();
-                        Message nodeAdded_msg = new Message("","","",
-                                                            SimpleDhtProvider.getInstance().NODE_ADDED,
-                                                            SimpleDhtProvider.getInstance().myPort,message.originPort,
-                                                            SimpleDhtProvider.getInstance().chordList.getPredecessor(String.valueOf(message.originPort)),
-                                                            SimpleDhtProvider.getInstance().chordList.getSuccessor(String.valueOf(message.originPort))
-                                                            );
-                        Log.e(TAG, "message created for ACK alive");
-                        SimpleDhtProvider.getInstance().sendNodeAddedMessage(nodeAdded_msg);
-                        SimpleDhtProvider.getInstance().setPredAndSuccHash(SimpleDhtProvider.getInstance().chordList.getPredecessor(SimpleDhtProvider.getInstance().myPort),
-                                SimpleDhtProvider.getInstance().chordList.getSuccessor(SimpleDhtProvider.getInstance().myPort));
 
-                        Log.e(TAG, "pred & succ for OWN is " + SimpleDhtProvider.predPort + " : " + SimpleDhtProvider.succPort);
+                        ChordList<String> tempList = new ChordList<String>();
+                        tempList.addAll(new TreeSet<String>(SimpleDhtProvider.getInstance().chordList));
+                        Log.e(TAG, "\ntempList starts*******");
+                        printTreeSet(tempList);
+                        Log.e(TAG, "\ntempList ends*******");
+                        SimpleDhtProvider.getInstance().chordList.add(SimpleDhtProvider.getInstance().portWithHashMap.get(message.originPort));
+
+                        //Log.e(TAG, String.valueOf(SimpleDhtProvider.getInstance().chordList.add(String.valueOf(message.originPort))));
+                        //printTreeSet(SimpleDhtProvider.getInstance().chordList);
+                        HashSet<String> nodeHashList = getNodesWithNewPredAndSucc(tempList);
+                        for (String node: nodeHashList) {
+                            String predPort = SimpleDhtProvider.getInstance().hashWithPortMap.get(SimpleDhtProvider.getInstance().chordList.getPredecessor(node));
+                            String succPort = SimpleDhtProvider.getInstance().hashWithPortMap.get(SimpleDhtProvider.getInstance().chordList.getSuccessor(node));
+                            String nodePort = SimpleDhtProvider.getInstance().hashWithPortMap.get(node);
+                            Log.e(TAG,"node " + nodePort + " pred & succ changed !");
+                            Log.e(TAG,"new Pred " + predPort);
+                            Log.e(TAG, "new succ " + succPort);
+                            if (!nodePort.equalsIgnoreCase(SimpleDhtProvider.myPort)) {
+                                Message nodeAdded_msg = new Message("dummy","dummy","dummy",
+                                        SimpleDhtProvider.getInstance().NODE_ADDED,
+                                        SimpleDhtProvider.getInstance().myPort, //origin port
+                                        nodePort,                     //remote port
+                                        predPort, //pred
+                                        succPort);  //succ
+
+                                SimpleDhtProvider.getInstance().sendNodeAddedMessage(nodeAdded_msg);
+                            } else {
+                                SimpleDhtProvider.getInstance().setPredAndSuccHash(predPort,succPort);
+                                Log.e(TAG, "pred & succ for OWN is " + SimpleDhtProvider.predPort + " : " + SimpleDhtProvider.succPort);
+                            }
+                        }
+
+                        Log.e(TAG, "message created for ACK alive");
+
+
+
+
                         //SimpleDhtProvider.singleInstance.chordList.add(message.originPort);
                     }
                     else if (message.messageType.equalsIgnoreCase(SimpleDhtProvider.INSERT_LOOKUP)) {

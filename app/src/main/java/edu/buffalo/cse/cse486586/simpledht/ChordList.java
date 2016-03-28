@@ -20,22 +20,22 @@ public class ChordList<String> extends TreeSet<String> {
         Log.e("AddToTreeSet", obj.toString());
         return super.add(obj);
     }
-    public String getPredecessor(String port) {
-        Log.e("getPredecessor","to find for " + port);
-        if (this.contains(port)) {
+    public String getPredecessor(String portHash) {
+        Log.e("getPredecessor","to find for " + portHash);
+        if (this.contains(portHash)) {
 
-            if (this.first().equals(port)) {
+            if (this.first().equals(portHash)) {
                 Log.e("getPredecessor","pred is " + this.last());
                 return this.last();
             }
             if (this.size() == 2) {
-                if (this.last().equals(port)) {
+                if (this.last().equals(portHash)) {
                     Log.e("getPredecessor","pred is " + this.first());
                     return this.first();
                 }
             }
-            Log.e("getPredecessor","pred is " + this.lower(port));
-            return this.lower(port);
+            Log.e("getPredecessor","pred is " + this.lower(portHash));
+            return this.lower(portHash);
         }
         Log.e("getPredecessor","port not found");
         return null;
