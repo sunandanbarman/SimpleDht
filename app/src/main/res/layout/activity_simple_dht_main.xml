@@ -46,7 +46,7 @@
         android:text="Send"
         android:id="@+id/btnSend"
         android:layout_alignParentBottom="true"
-        android:layout_toStartOf="@+id/btnClear" />
+        android:layout_alignEnd="@+id/btnGDump" />
 
     <EditText
         android:layout_width="wrap_content"
@@ -54,9 +54,8 @@
         android:id="@+id/editText"
         android:layout_alignTop="@+id/btnSend"
         android:layout_alignParentStart="true"
-        android:layout_toStartOf="@+id/btnSend"
-        android:layout_alignParentBottom="true"
-        android:layout_alignEnd="@+id/btnGDump" />
+        android:layout_toStartOf="@+id/btnGDump"
+        android:layout_alignParentBottom="true" />
 
     <Button
         style="?android:attr/buttonStyleSmall"
@@ -65,6 +64,16 @@
         android:text="clear"
         android:id="@+id/btnClear"
         android:layout_alignParentBottom="true"
-        android:layout_alignParentEnd="true" />
+        android:layout_toEndOf="@+id/btnSend" />
+
+    <Button
+        style="?android:attr/buttonStyleSmall"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Q"
+        android:id="@+id/btnQuery"
+        android:layout_alignTop="@+id/btnClear"
+        android:layout_alignParentEnd="true"
+        android:layout_toEndOf="@+id/btnClear" />
 
 </RelativeLayout>

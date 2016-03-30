@@ -78,6 +78,25 @@ public class SimpleDhtActivity extends Activity {
                 tv.setText("");
             }
         });
+        findViewById(R.id.btnQuery).setOnClickListener(
+            new View.OnClickListener() {
+                @Override
+                public  void onClick(View v) {
+                    resultCursor = getContentResolver().query(contentURI,null,
+                                    editText.getText().toString(),null,null);
+                    if(resultCursor == null ) {
+                        Log.e(TAG,"Data not found");
+                    }
+                    resultCursor.close();
+                    /*String key  = resultCursor.getString(0);
+                    String value= resultCursor.getString(1);
+                    tv.append("\n**** Specific Found****");
+                    tv.append("\n" + key + "\n");
+                    tv.append(value);
+                    resultCursor.close();*/
+                }
+        });
+
         findViewById(R.id.btnLDump).setOnClickListener(
                 new View.OnClickListener() {
                     @Override

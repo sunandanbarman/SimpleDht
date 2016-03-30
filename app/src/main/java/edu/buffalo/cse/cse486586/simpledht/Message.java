@@ -1,5 +1,6 @@
 package edu.buffalo.cse.cse486586.simpledht;
 
+import android.database.Cursor;
 import android.util.Log;
 
 /**
@@ -13,6 +14,7 @@ public class Message {
     public String originPort, remotePort;
     public String predPort, succPort; //use only in case of NODE_ADDED message
 
+    private Cursor resultCursor;
     Message() {
 
     }
@@ -26,6 +28,7 @@ public class Message {
         this.remotePort  = m1.remotePort;
         this.predPort    = m1.predPort;
         this.succPort    = m1.succPort;
+        //this.resultCursor= null;
     }
     Message(String text) {
         this.reconstructMessage(text);

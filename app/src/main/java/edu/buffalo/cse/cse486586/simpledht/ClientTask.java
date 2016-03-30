@@ -26,7 +26,7 @@ public class ClientTask extends AsyncTask<Message,Void,Void> {
             Log.e(SimpleDhtActivity.TAG, "messageType is either blank or NULL");
             return null;
         }
-        Log.e(TAG,"to send message to " + message.remotePort + " messsageType " + message.messageType);
+        Log.e(TAG,"to send message to " + message.remotePort + " messsageType " + message.messageType + " originPort " + message.originPort);
 /*
         Log.e(SimpleDhtProvider.TAG,"location :" + Arrays.asList(SimpleDhtProvider.REMOTE_PORT).get(message.originPort));
         if (!Arrays.asList(SimpleDhtProvider.REMOTE_PORT).contains(message.originPort)) {
@@ -43,7 +43,7 @@ public class ClientTask extends AsyncTask<Message,Void,Void> {
         try {
             socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
                     Integer.valueOf(message.remotePort));
-            Log.e(TAG,"LocalSocketAddress :" + socket.getLocalSocketAddress().toString());
+            //Log.e(TAG,"LocalSocketAddress :" + socket.getLocalSocketAddress().toString());
             socket.setSoTimeout(SimpleDhtProvider.TIMEOUT);
             outputStream    = socket.getOutputStream();
             dataOutputStream= new DataOutputStream(outputStream);

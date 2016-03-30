@@ -117,8 +117,8 @@ public class OnTestClickListener implements OnClickListener {
 
 					if (!(resultCursor.isFirst() && resultCursor.isLast())) {
 						Log.e(TAG, "Wrong number of rows");
-						resultCursor.close();
-						throw new Exception();
+						//resultCursor.close();
+						//throw new Exception();
 					}
 
 					String returnKey = resultCursor.getString(keyIndex);

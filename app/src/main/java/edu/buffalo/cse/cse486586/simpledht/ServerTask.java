@@ -1,6 +1,7 @@
 package edu.buffalo.cse.cse486586.simpledht;
 
 import android.content.ContentValues;
+import android.database.Cursor;
 import android.os.AsyncTask;
 import android.util.Log;
 
@@ -13,10 +14,7 @@ import java.io.StreamCorruptedException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
-import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.TreeSet;
 
 /**
@@ -30,6 +28,18 @@ public class ServerTask extends AsyncTask<ServerSocket, String, Void> {
             Log.e("printTreeSet","port " + port);
         }
         Log.e("printTreeSet","******* end  *****");
+    }
+
+    private String findLocationStoringTheMessage(Message message) {
+        String key     = message.key;
+        String hashKey = SimpleDhtProvider.getInstance().genHash(key);
+        if (hashKey.compareTo(SimpleDhtProvider.getInstance().chordList.first()) < 0) {
+            return  SimpleDhtProvider.hashWithPortMap.get(SimpleDhtProvider.getInstance().chordList.first());
+        } else if (hashKey.compareTo(SimpleDhtProvider.getInstance().chordList.last()) > 0 ) {
+            return SimpleDhtProvider.hashWithPortMap.get(SimpleDhtProvider.getInstance().chordList.first());
+        } else {
+            return SimpleDhtProvider.hashWithPortMap.get(SimpleDhtProvider.getInstance().chordList.ceiling(hashKey));
+        }
     }
     private HashSet<String> getNodesWithNewPredAndSucc(ChordList<String> oldChordList) {
         HashSet<String> result = new HashSet<String>();
@@ -64,23 +74,9 @@ public class ServerTask extends AsyncTask<ServerSocket, String, Void> {
                 }
             }
         }
-        /*for(String node : oldChordList) {
-            String avdID = SimpleDhtProvider.getInstance().hashWithPortMap.get(node);
-            Log.e("getNodesWithNewPredSucc","avdID in =" + avdID);
-            tempSucc = SimpleDhtProvider.getInstance().chordList.getSuccessor(avdID);
-            tempPred = SimpleDhtProvider.getInstance().chordList.getPredecessor(avdID);
-
-            if (!tempSucc.equalsIgnoreCase(oldChordList.getSuccessor(avdID))) { //successor is different
-                Log.e("getNodesWithNewPredSucc",avdID + " has new successor ");
-                result.add(String.valueOf(Integer.valueOf(avdID)*2));
-            }
-            if (!tempPred.equalsIgnoreCase(oldChordList.getPredecessor(avdID))) { //pred is different
-                Log.e("getNodesWithNewPredSucc",avdID + " has new predecessor ");
-                result.add(String.valueOf(Integer.valueOf(avdID)*2));
-            }
-        }*/
         return result;
     }
+
     /**
      * Does a lookup on the message's hashkey and determines whether the message to this node, or to forward to successor node for further lookups
      * @return
@@ -100,7 +96,7 @@ public class ServerTask extends AsyncTask<ServerSocket, String, Void> {
         try {
             while(true) {
                 clientSocket = serverSocket.accept();
-                Log.e(TAG,"clientSocket accepted from  " + clientSocket.getRemoteSocketAddress());
+                //Log.e(TAG,"clientSocket accepted from  " + clientSocket.getRemoteSocketAddress());
                 try {
                     inputStream = clientSocket.getInputStream();
                     dataInputStream = new DataInputStream(inputStream);
@@ -140,7 +136,7 @@ public class ServerTask extends AsyncTask<ServerSocket, String, Void> {
                                         predPort, //pred
                                         succPort);  //succ
 
-                                SimpleDhtProvider.getInstance().sendNodeAddedMessage(nodeAdded_msg);
+                                SimpleDhtProvider.getInstance().sendMessageToRemotePort(nodeAdded_msg);
                             } else {
                                 SimpleDhtProvider.getInstance().setPredAndSuccHash(predPort,succPort);
                                 Log.e(TAG, "pred & succ for OWN is " + SimpleDhtProvider.predPort + " : " + SimpleDhtProvider.succPort);
@@ -161,11 +157,14 @@ public class ServerTask extends AsyncTask<ServerSocket, String, Void> {
                         cv.put(SimpleDhtActivity.VALUE_FIELD, message.value);
 
 
+/*
                         if (message.originPort.equalsIgnoreCase(SimpleDhtProvider.getInstance().myPort)) {
                             //message has returned, hence insert directly; no need to check
                             Log.e(TAG,"Message has returned to origin. InsertIntoDatabase");
                             SimpleDhtProvider.getInstance().insertIntoDatabase(cv);
-                        } else {
+                        } else
+*/
+                        {
                             Log.e(TAG,"diff. origin;search continues...");
                             cv.put(SimpleDhtActivity.PORT, message.originPort);
                             SimpleDhtProvider.getInstance().insert(SimpleDhtActivity.contentURI, cv);
@@ -174,6 +173,59 @@ public class ServerTask extends AsyncTask<ServerSocket, String, Void> {
                     }
                     else if (message.messageType.equalsIgnoreCase(SimpleDhtProvider.QUERY_LOOKUP)) {
                         Log.e(TAG,"Query_Lookup request found from  " + message.originPort);
+                        String portLocation = findLocationStoringTheMessage(message);
+                        //reply to origin port with found portLocation
+                        Log.e(TAG,"actual port location is " + portLocation);
+                        message.remotePort= message.originPort; //reply to sender about it
+                        message.messageType= SimpleDhtProvider.QUERY_DONE;
+                        message.originPort = portLocation;      // this is the location of DB; receiver extracts this for further lookup
+                        //Log.e(TAG,"message.originPort is now " + message.originPort);
+                        SimpleDhtProvider.getInstance().sendMessageToRemotePort(message);
+
+                    } else if (message.messageType.equalsIgnoreCase(SimpleDhtProvider.QUERY_DONE)) {
+                        Log.e(TAG,"Received reply from AVD0 about portLocation " + message.originPort);
+                        SimpleDhtProvider.portLocation = message.originPort;
+                        synchronized (SimpleDhtProvider.lock) {
+                            SimpleDhtProvider.queryDone = true;
+                            SimpleDhtProvider.lock.notifyAll();
+                        }
+
+                    } else if (message.messageType.equalsIgnoreCase(SimpleDhtProvider.QUERY_GET_DATA)) {
+                        Log.e(TAG,"QUERY_GET_DATA, To query " + message.key);
+                        Cursor cursor = SimpleDhtProvider.getInstance().returnLocalData(message.key);
+
+                        Log.e(TAG,"Rows found :" + cursor.getCount());
+                        cursor.moveToFirst();
+                        if (!(cursor.isFirst() && cursor.isLast())) {
+                            Log.e(TAG, "Wrong number of rows");
+                            //resultCursor.close();
+                            //throw new Exception();
+                        }
+                        message.messageType = SimpleDhtProvider.QRY_DATA_DONE;
+                        int keyIndex   = cursor.getColumnIndex(SimpleDhtActivity.KEY_FIELD);
+                        int valueIndex = cursor.getColumnIndex(SimpleDhtActivity.VALUE_FIELD);
+
+                        Log.e(TAG,"keyIndex " + keyIndex);
+                        Log.e(TAG,"valueIndex " + valueIndex);
+
+                        message.key         = cursor.getString(keyIndex);
+                        message.value       = cursor.getString(valueIndex);
+
+                        Log.e(TAG,"DB key " + message.key);
+                        Log.e(TAG,"DB val " + message.value);
+
+                        message.remotePort  = message.originPort;
+                        message.originPort  = SimpleDhtProvider.myPort;
+                        SimpleDhtProvider.getInstance().sendMessageToRemotePort(message);
+                    }
+                    else if (message.messageType.equalsIgnoreCase(SimpleDhtProvider.QRY_DATA_DONE)) {
+                        Log.e(TAG,"Result of QRY_DATA_DONE from " + message.remotePort + " is " + message.value);
+                        SimpleDhtProvider.queryKey  = message.key;
+                        SimpleDhtProvider.queryValue= message.value;
+                        synchronized (SimpleDhtProvider.lock) {
+                            SimpleDhtProvider.queryDone = true;
+                            SimpleDhtProvider.lock.notifyAll();
+                        }
                     }
                     else if (message.messageType.equalsIgnoreCase(SimpleDhtProvider.getInstance().NODE_ADDED)) {
                         Log.e(TAG,"Node added ACK found, pred and succ are" + message.predPort + " : " + message.succPort);
@@ -183,25 +235,7 @@ public class ServerTask extends AsyncTask<ServerSocket, String, Void> {
                         Log.e(TAG,"successor Update to "+ message.succPort);
                         SimpleDhtProvider.getInstance().updateSuccessor(message);
                     }
-                        /* A message is received, check its hash*/
-/*
-                    if (SimpleDhtProvider.doLookup(""))
-                    { // message belongs to this node, let the client know
-                        outputStream = clientSocket.getOutputStream();
-                        dataOutputStream = new DataOutputStream(outputStream);
-                        //Message msgACK   = new Message(message.key,message.value,message.hashKey, ACK, Integer.valueOf(myPort));
-                        //String replyACK  = msgACK.deconstructMessage();
-                        //dataOutputStream.write(replyACK.getBytes());
 
-                        clientSocket.close();
-                    } else {
-
-
-                        clientSocket.close();
-                    }
-*/
-
-                    //clientSocket.close();
                 } catch(SocketTimeoutException e) {
                     e.printStackTrace();
                 } catch(StreamCorruptedException e) {
