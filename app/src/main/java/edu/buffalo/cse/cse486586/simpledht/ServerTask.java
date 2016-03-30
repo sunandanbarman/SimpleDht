@@ -14,8 +14,13 @@ import java.io.StreamCorruptedException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.TreeSet;
+
+import javax.security.auth.login.LoginException;
 
 /**
  * Created by sunandan on 3/19/16.
@@ -116,6 +121,7 @@ public class ServerTask extends AsyncTask<ServerSocket, String, Void> {
                         Log.e(TAG, "\ntempList starts*******");
                         printTreeSet(tempList);
                         Log.e(TAG, "\ntempList ends*******");
+
                         SimpleDhtProvider.getInstance().chordList.add(SimpleDhtProvider.getInstance().portWithHashMap.get(message.originPort));
 
                         //Log.e(TAG, String.valueOf(SimpleDhtProvider.getInstance().chordList.add(String.valueOf(message.originPort))));
@@ -156,19 +162,9 @@ public class ServerTask extends AsyncTask<ServerSocket, String, Void> {
                         cv.put(SimpleDhtActivity.KEY_FIELD,message.key);
                         cv.put(SimpleDhtActivity.VALUE_FIELD, message.value);
 
-
-/*
-                        if (message.originPort.equalsIgnoreCase(SimpleDhtProvider.getInstance().myPort)) {
-                            //message has returned, hence insert directly; no need to check
-                            Log.e(TAG,"Message has returned to origin. InsertIntoDatabase");
-                            SimpleDhtProvider.getInstance().insertIntoDatabase(cv);
-                        } else
-*/
-                        {
-                            Log.e(TAG,"diff. origin;search continues...");
-                            cv.put(SimpleDhtActivity.PORT, message.originPort);
-                            SimpleDhtProvider.getInstance().insert(SimpleDhtActivity.contentURI, cv);
-                        }
+                        Log.e(TAG,"diff. origin;search continues...");
+                        cv.put(SimpleDhtActivity.PORT, message.originPort);
+                        SimpleDhtProvider.getInstance().insert(SimpleDhtActivity.contentURI, cv);
 
                     }
                     else if (message.messageType.equalsIgnoreCase(SimpleDhtProvider.QUERY_LOOKUP)) {
@@ -191,35 +187,43 @@ public class ServerTask extends AsyncTask<ServerSocket, String, Void> {
                         }
 
                     } else if (message.messageType.equalsIgnoreCase(SimpleDhtProvider.QUERY_GET_DATA)) {
-                        Log.e(TAG,"QUERY_GET_DATA, To query " + message.key);
+                        Log.e(TAG, "QUERY_GET_DATA, To query " + message.key);
                         Cursor cursor = SimpleDhtProvider.getInstance().returnLocalData(message.key);
-
-                        Log.e(TAG,"Rows found :" + cursor.getCount());
-                        cursor.moveToFirst();
-                        if (!(cursor.isFirst() && cursor.isLast())) {
-                            Log.e(TAG, "Wrong number of rows");
-                            //resultCursor.close();
-                            //throw new Exception();
+                        if (cursor == null) {
+                            throw new Exception();
                         }
+                        Log.e(TAG,"cursor couunt " + cursor.getCount());
+
+                        //cursor.moveToFirst();
+
                         message.messageType = SimpleDhtProvider.QRY_DATA_DONE;
+                        HashMap<String,String> list = getAllKeysAndValues(cursor);
+
+/*
                         int keyIndex   = cursor.getColumnIndex(SimpleDhtActivity.KEY_FIELD);
                         int valueIndex = cursor.getColumnIndex(SimpleDhtActivity.VALUE_FIELD);
 
                         Log.e(TAG,"keyIndex " + keyIndex);
                         Log.e(TAG,"valueIndex " + valueIndex);
-
-                        message.key         = cursor.getString(keyIndex);
-                        message.value       = cursor.getString(valueIndex);
+*/
+                        if (list.size() > 0) {
+                            message.key   = list.get(SimpleDhtActivity.KEY_FIELD);
+                            message.value = list.get(SimpleDhtActivity.VALUE_FIELD);
+                        } else {
+                            message.key   = SimpleDhtProvider.EMPTY;
+                            message.value = SimpleDhtProvider.EMPTY;
+                        }
 
                         Log.e(TAG,"DB key " + message.key);
                         Log.e(TAG,"DB val " + message.value);
 
                         message.remotePort  = message.originPort;
                         message.originPort  = SimpleDhtProvider.myPort;
+                        cursor.close();
                         SimpleDhtProvider.getInstance().sendMessageToRemotePort(message);
                     }
                     else if (message.messageType.equalsIgnoreCase(SimpleDhtProvider.QRY_DATA_DONE)) {
-                        Log.e(TAG,"Result of QRY_DATA_DONE from " + message.remotePort + " is " + message.value);
+                        Log.e(TAG,"Result of QRY_DATA_DONE from " + message.originPort + " is " + " key=" + message.key + " = " + message.value);
                         SimpleDhtProvider.queryKey  = message.key;
                         SimpleDhtProvider.queryValue= message.value;
                         synchronized (SimpleDhtProvider.lock) {
@@ -234,7 +238,51 @@ public class ServerTask extends AsyncTask<ServerSocket, String, Void> {
                     else if (message.messageType.equalsIgnoreCase(SimpleDhtProvider.getInstance().UPDATE_SUCC)) {
                         Log.e(TAG,"successor Update to "+ message.succPort);
                         SimpleDhtProvider.getInstance().updateSuccessor(message);
-                    }
+
+                    } else if (message.messageType.equalsIgnoreCase(SimpleDhtProvider.ALIVE_NODES)) {
+                        Log.e(TAG,"Return all alive nodes list to " + message.originPort);
+                        message.key = SimpleDhtProvider.getInstance().getListOfAliveNodes();
+                        Log.e(TAG,"Alive nodes are " + message.key);
+
+                        message.remotePort = message.originPort;
+                        message.originPort = SimpleDhtProvider.myPort;
+                        message.messageType= SimpleDhtProvider.ALIVE_NODES_RESP;
+
+                        Log.e(TAG,"Send response of " + message.messageType +  " to "  + message.remotePort);
+                        SimpleDhtProvider.getInstance().sendMessageToRemotePort(message);
+
+                    } else if (message.messageType.equalsIgnoreCase(SimpleDhtProvider.ALIVE_NODES_RESP)) {
+                        Log.e(TAG,"List of alive nodes found from " + SimpleDhtProvider.NODE_JOINER_PORT + " is " + message.key);
+                        SimpleDhtProvider.queryKey = message.key;
+                        synchronized (SimpleDhtProvider.lock) {
+                            SimpleDhtProvider.queryDone = true;
+                            SimpleDhtProvider.lock.notifyAll();
+                        }
+                    } /*else if (message.messageType.equalsIgnoreCase(SimpleDhtProvider.DB_ROW_COUNT)) {
+                        Log.e(TAG,"DB_ROW_COUNT request from " + message.remotePort);
+                        Cursor c = SimpleDhtProvider.getInstance().returnLocalData(null);
+                        if (c == null ) {
+                            throw new Exception();
+
+                        }
+                        c.moveToFirst();
+                        message.key        = String.valueOf(c.getCount());
+                        Log.e(TAG,"DB rows count are " + message.key);
+                        message.remotePort = message.originPort;
+                        message.originPort = SimpleDhtProvider.myPort;
+                        message.messageType= SimpleDhtProvider.DB_ROW_COUNT_FOUND;
+                        c.close();
+                        SimpleDhtProvider.getInstance().sendMessageToRemotePort(message);
+                    }*/ //else if (message.messageType.equalsIgnoreCase(SimpleDhtProvider.DB_ROW_COUNT_FOUND)) {
+                      /*  Log.e(TAG,"DB_ROW_COUNT_FOUND from  " + message.originPort);
+                        SimpleDhtProvider.queryKey = message.key;
+                        synchronized (SimpleDhtProvider.lock) {
+                            SimpleDhtProvider.queryDone= true;
+                            SimpleDhtProvider.lock.notifyAll();
+                        }
+                    }*/ /*else if (message.messageType.equalsIgnoreCase(SimpleDhtProvider.DB_ROW)) {
+
+                    }*/
 
                 } catch(SocketTimeoutException e) {
                     e.printStackTrace();
@@ -255,4 +303,35 @@ public class ServerTask extends AsyncTask<ServerSocket, String, Void> {
         }
         return null;
     }
+
+    private HashMap<String,String> getAllKeysAndValues(Cursor cursor) {
+        HashMap<String,String> list = new HashMap<String, String>();
+        if (cursor == null || cursor.getCount() == 0) {
+            return list;
+        }
+        Log.e("getAllKeysAndValues", "Rows found :" + cursor.getCount());
+        int keyIndex  = cursor.getColumnIndex(SimpleDhtActivity.KEY_FIELD);
+        int valueIndex= cursor.getColumnIndex(SimpleDhtActivity.VALUE_FIELD);
+
+        cursor.moveToFirst();
+        while(!cursor.isAfterLast()) {
+            String key  = cursor.getString(keyIndex);
+            String value= cursor.getString(valueIndex);
+            if (list.get(SimpleDhtActivity.KEY_FIELD) == null) {
+                list.put(SimpleDhtActivity.KEY_FIELD,key);
+            } else {
+                list.put(SimpleDhtActivity.KEY_FIELD,new StringBuilder(list.get(SimpleDhtActivity.KEY_FIELD)).append(":").append(key).toString());
+            }
+
+            if (list.get(SimpleDhtActivity.VALUE_FIELD) == null) {
+                list.put(SimpleDhtActivity.VALUE_FIELD,value);
+            } else {
+                list.put(SimpleDhtActivity.VALUE_FIELD,new StringBuilder(list.get(SimpleDhtActivity.VALUE_FIELD)).append(":").append(value).toString());
+            }
+
+            cursor.moveToNext();
+        }
+        return list;
+    }
+
 }

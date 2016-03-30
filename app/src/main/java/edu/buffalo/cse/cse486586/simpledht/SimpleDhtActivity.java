@@ -20,7 +20,8 @@ public class SimpleDhtActivity extends Activity {
     public static SQLHelperClass sql;
     static final int SERVER_PORT = 10000;
     static final String TAG      = SimpleDhtActivity.class.getName();
-    private static final String LDumpSelection = "@";
+    public static final String LDumpSelection = "@";
+    public static final String GDumpSelection = "*";
     public static final String KEY_FIELD   = "key";
     public static final String VALUE_FIELD = "value";
     public static final String PORT        = "port";
@@ -63,7 +64,8 @@ public class SimpleDhtActivity extends Activity {
             public void onClick(View v) {
                 ContentValues cv = new ContentValues();
                 cv.put(KEY_FIELD, editText.getText().toString());
-                cv.put(VALUE_FIELD, editText.getText().toString());
+
+                cv.put(VALUE_FIELD, "value" + editText.getText().toString().charAt(editText.getText().length()-1));
                 editText.setText("");
 
                 Uri uri = getContentResolver().insert(contentURI,cv);
@@ -119,8 +121,8 @@ public class SimpleDhtActivity extends Activity {
                         resultCursor.moveToFirst();
                         tv.append("************LDump starts******\n");
                         while (!resultCursor.isAfterLast()) {
-                            String key = resultCursor.getString(0);
-                            String val = resultCursor.getString(1);
+                            String key = resultCursor.getString(keyIndex);
+                            String val = resultCursor.getString(valueIndex);
                             Log.e(TAG, " key :" + key + " value :" + val);
                             tv.append(key + "=" + val);
                             tv.append("\n");
@@ -136,6 +138,37 @@ public class SimpleDhtActivity extends Activity {
         findViewById(R.id.btnGDump).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                resultCursor = getContentResolver().query(contentURI,null,GDumpSelection,null,null);
+                if (resultCursor == null) {
+
+                    Log.e(TAG,"resultCursor null");
+                    return;
+                }
+                int keyIndex = resultCursor.getColumnIndex(KEY_FIELD);
+                int valueIndex = resultCursor.getColumnIndex(VALUE_FIELD);
+                if (keyIndex == -1 || valueIndex == -1) {
+                    Log.e(TAG, "Wrong columns");
+                    resultCursor.close();
+
+                }
+
+                resultCursor.moveToFirst();
+                tv.append("************GDump starts******\n");
+                while (!resultCursor.isAfterLast()) {
+                    String key = resultCursor.getString(keyIndex);
+                    String val = resultCursor.getString(valueIndex);
+                    Log.e(TAG, " key :" + key + " value :" + val);
+                    tv.append(key + "=" + val);
+                    tv.append("\n");
+                    resultCursor.moveToNext();
+                }
+                tv.append("\n************GDump ends******");
+                Log.e(TAG, "Found rows are :" + String.valueOf(resultCursor.getCount()));
+
+                resultCursor.close();
+
+                if (resultCursor != null)
+                    resultCursor.close();
 
             }
         });

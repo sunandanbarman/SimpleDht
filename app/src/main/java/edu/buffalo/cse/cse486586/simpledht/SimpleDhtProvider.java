@@ -41,9 +41,14 @@ public class SimpleDhtProvider extends ContentProvider {
     public static String QUERY_DONE    = "QUERY_DONE";    // indicate the originator that the query was completed; tell them the actual portLocation
     public static String QUERY_GET_DATA= "QUERY_GET_DATA";// indicate the process to return local data (specified in "key", can be "@"s )
     public static String QRY_DATA_DONE = "QRY_DATA_DONE"; // indicate the key is found in local DB; inform remote avd of the result
+    public static String ALIVE_NODES   = "ALIVE_NODES";
+    public static String ALIVE_NODES_RESP = "ALIVE_NODES_RESP";
+    public static String EMPTY         = "EMPTY";
+    public static String DB_ROW_COUNT  = "DB_ROW_COUNT";
+    public static String DB_ROW_COUNT_FOUND  = "DB_ROW_COUNT_FOUND";
 
     public static final int TIMEOUT          = 1000;
-    public static final int MAX_MSG_LENGTH   = 512;
+    public static final int MAX_MSG_LENGTH   = 4096; //HUGE: as the whole DB data is dumped  as a string
     public static final int SERVER_PORT      = 10000;
     public static final int NODE_JOINER_PORT = 11108;
     //public static final int[] AVD_ID         = {5554,5556,5558,5560,5562};
@@ -59,6 +64,7 @@ public class SimpleDhtProvider extends ContentProvider {
     public static boolean queryDone = false;
     public static String portLocation; // sent by AVD0 informing the AVD of the actual location of the key
     public static String queryKey, queryValue; // stores the result sent by remote avd after querying its database
+
     /*%%%%%%%%%%%%%%%%%%%%% HELPER FUNCTIONS START %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%*/
     public String getMyPort() {
         TelephonyManager tel = (TelephonyManager)getContext().getSystemService(Context.TELEPHONY_SERVICE);
@@ -269,11 +275,25 @@ public class SimpleDhtProvider extends ContentProvider {
 
     public Cursor returnLocalData(String selection) {
         Cursor c;
-        if (selection == null)
+        if (selection == null || selection.equalsIgnoreCase(SimpleDhtActivity.GDumpSelection))
             c = SimpleDhtActivity.sql.getData(null,null,null,null);
         else
             c=  SimpleDhtActivity.sql.getData(null, "key=?",new String[]{selection}, null);
         return c;
+    }
+
+    private void waitForResponse() {
+        while(!queryDone) {
+            synchronized (lock) {
+                try {
+                    lock.wait(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                    break;
+                }
+            }
+        }
+        queryDone = false;
     }
     /**
      * NOTE : No synchronization is required for ContentProvider as the underlying SQLite provides thread-safety.
@@ -287,78 +307,153 @@ public class SimpleDhtProvider extends ContentProvider {
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
             String sortOrder) {
-        Cursor c;
-        boolean bReturnFromLocalOnly = false;
-        //String hashKey;
-        Log.e(TAG,"uri :" + uri);
-        Log.e(TAG,"selection :" + selection);
-        //Log.e(TAG,"sortOrder :" + sortOrder);
-        /*for(String s:projection) {
-            Log.e(TAG,"projection :" + s);
-        }*/
-        /*for(String s:selectionArgs) {
-            Log.e(TAG,"selectionArgs " + s);
-        }*/
-        Log.e(TAG,"query is "  + selection);
-        Log.e(TAG,"projection " + projection + " selection " + selection);
+        Cursor c = null;
+        //boolean bReturnFromLocalOnly = false;
 
-        //hashKey = genHash(selection);
-        if (predHash.equalsIgnoreCase("") && succHash.equalsIgnoreCase("")) {
-            selection = "@";
+        Log.e(TAG,"uri :" + uri);
+        Log.e(TAG,"query is "  + selection);
+        //if only 1 avd in chord ring, return all local data in case of "@" OR "*" queries
+        if (predHash.equalsIgnoreCase("") && succHash.equalsIgnoreCase("") &&
+            (  selection.equalsIgnoreCase(SimpleDhtActivity.LDumpSelection) || selection.equalsIgnoreCase(SimpleDhtActivity.GDumpSelection))) {
+            selection = SimpleDhtActivity.LDumpSelection;
         }
-        if (selection.equalsIgnoreCase("@")) { //Local dump
+        if (selection.equalsIgnoreCase(SimpleDhtActivity.LDumpSelection)) { //Local dump
             Log.e(TAG,"Local dump starts");
             c = returnLocalData(null);
-        } else{
-            Log.e(TAG,"Ask to avd0");
+        }
+        else if (selection.equalsIgnoreCase(SimpleDhtActivity.GDumpSelection)) { //global dump
+            Log.e(TAG,"Global dump starts");
+            Message message = new Message(selection,"dummy","dummy",ALIVE_NODES,myPort,String.valueOf(NODE_JOINER_PORT),"dummy","dummy");
+            new ClientTask().execute(message);
+            //try {
+            MatrixCursor matrixCursor = new MatrixCursor(new String[]{SimpleDhtActivity.KEY_FIELD,SimpleDhtActivity.VALUE_FIELD});
+            waitForResponse();
+/*
+            while(!queryDone) {
+                synchronized (lock) {
+                    lock.wait(1000);
+                }
+
+            }
+*/
+            queryDone = false;
+            Log.e(TAG,"Response of alive nodes " + SimpleDhtProvider.queryKey);
+            String[] aliveNodes = SimpleDhtProvider.queryKey.split(":");
+            StringBuilder sKeyList = new StringBuilder();
+            StringBuilder sValList = new StringBuilder();
+            for(String sAlivePort : aliveNodes) {
+                Log.e(TAG,"sAlive " + sAlivePort);
+                message.remotePort = sAlivePort;
+                message.originPort = myPort;
+                message.messageType= QUERY_GET_DATA;
+                message.key        = SimpleDhtActivity.GDumpSelection; // get all data
+
+                new ClientTask().execute(message);
+                waitForResponse();
+                //Log.e(TAG, "Db rows from  " + message.remotePort + " is " + SimpleDhtProvider.queryKey);
+
+
+                /*int rowCount = Integer.valueOf(SimpleDhtProvider.queryKey);
+                if (rowCount > 0) {
+                    SimpleDhtProvider.queryKey = "";
+                    for(int i=0; i < rowCount; i++) {
+                        Log.e(TAG,"ask for " + i + " row from " + message.remotePort );
+                        new ClientTask().execute(message);
+                        Log.e(TAG,"query result for " + i + " row is " + SimpleDhtProvider.queryKey + "=" + SimpleDhtProvider.queryValue);
+                        String[] results = new String[]{SimpleDhtProvider.queryKey,SimpleDhtProvider.queryValue};
+                        matrixCursor.addRow(results);
+                    }
+
+                } else {
+                    Log.e(TAG,"row count from  " + message.remotePort + " is zero");
+                }*/
+
+                Log.e(TAG, "all keys from " + message.remotePort + " is " + SimpleDhtProvider.queryKey);
+                Log.e(TAG, "all values from " + message.remotePort + " is " + SimpleDhtProvider.queryValue);
+                if (!SimpleDhtProvider.queryKey.equalsIgnoreCase(SimpleDhtProvider.EMPTY)) {
+                    String[] keyArr = SimpleDhtProvider.queryKey.split(":");
+                    String[] valArr = SimpleDhtProvider.queryValue.split(":");
+
+                    for(int i=0; i < keyArr.length; i++) {
+                        String[] results  = new String[]{keyArr[i],valArr[i]};
+                        matrixCursor.addRow(results);
+                    }
+                } else {
+                    Log.e(TAG,"No data in " + message.remotePort);
+                }
+                //sKeyList = sKeyList.append(message.key.split(":"));
+                //sValList = sValList.append(message.value.split(":"));
+            }
+
+            //String[] results = new String[]{sKeyList.toString(), sValList.toString()};
+
+            //matrixCursor.addRow(results);
+            return matrixCursor;
+/*
+            } catch(InterruptedException e) {
+                e.printStackTrace();
+            }
+*/
+        }
+        else{
+            Log.e(TAG, "Ask to avd0");
             c = SimpleDhtActivity.sql.getData(null, "key=?",new String[]{selection}, null);
             Log.e(TAG,"Rows in DB ==>" + String.valueOf(c.getCount()));
 
-            if ((c== null) || (c.getCount() == 0)) { //not found in local database, forward to successor
+            if ((c== null) || (c.getCount() == 0)) { //not found in local database, ask avd0 for actual location
                 Log.e(TAG,"To forward message to " + NODE_JOINER_PORT + " to find port location");
                 Message message = new Message(selection,"dummy","dummy",QUERY_LOOKUP,myPort,String.valueOf(NODE_JOINER_PORT),"dummy","dummy");
                 new ClientTask().execute(message);
+                waitForResponse();
+                Log.e(TAG,"Actual location of message :" + SimpleDhtProvider.portLocation);
+/*
                 try {
                     while(!queryDone)
                     { //wait here until server reports back
                         synchronized (lock) {
                             lock.wait(1000); // UNBOUNDED LOCK WILL CAUSE APPLICATION TO HANG
                         }
-                        Log.e(TAG,"Loop A");
-                        //Thread.sleep(10);
                     }
                     queryDone = false;
-                    Log.e(TAG,"Actual location of message :" + SimpleDhtProvider.portLocation);
+
 
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
+*/
                 message.remotePort = SimpleDhtProvider.portLocation;
                 message.originPort = myPort;
                 message.messageType= SimpleDhtProvider.QUERY_GET_DATA;
                 message.key        = selection;
 
                 new ClientTask().execute(message);
-                try {
+/*
+                try
+                {
+*/
+/*
                     while(!queryDone) {
                         synchronized (lock) {
                             lock.wait(1000); // UNBOUNDED LOCK WILL CAUSE APPLICATION TO HANG
                         }
-                        Log.e(TAG,"Loop B");
                     }
-;                   queryDone = false;
-                    Log.e(TAG, "Found key " + SimpleDhtProvider.queryKey + " : " + SimpleDhtProvider.queryValue);
-                    SimpleDhtActivity.getInstance().setText("\n*** QUERY RESULTS **** ="  + SimpleDhtProvider.queryKey + " :: " + SimpleDhtProvider.queryValue + "\n");
+*/
+//;                   queryDone = false;
+                waitForResponse();
+                Log.e(TAG, "Found key " + SimpleDhtProvider.queryKey + " : " + SimpleDhtProvider.queryValue);
+                SimpleDhtActivity.getInstance().setText("\n*** QUERY RESULTS **** ="  + SimpleDhtProvider.queryKey + " :: " + SimpleDhtProvider.queryValue + "\n");
 
-                    String[] results = new String[]{SimpleDhtProvider.queryKey, SimpleDhtProvider.queryValue};
-                    MatrixCursor matrixCursor = new MatrixCursor(new String[]{SimpleDhtActivity.KEY_FIELD,SimpleDhtActivity.VALUE_FIELD});
-                    matrixCursor.addRow(results);
-                    c = matrixCursor;
+                String[] results = new String[]{SimpleDhtProvider.queryKey, SimpleDhtProvider.queryValue};
+                MatrixCursor matrixCursor = new MatrixCursor(new String[]{SimpleDhtActivity.KEY_FIELD,SimpleDhtActivity.VALUE_FIELD});
+                matrixCursor.addRow(results);
+                //c = matrixCursor;
 
-                   return matrixCursor;
+                return matrixCursor;
+/*
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
+*/
 
             } else {
 
@@ -436,7 +531,14 @@ public class SimpleDhtProvider extends ContentProvider {
             Log.e(TAG,"message.type is not UPDATE_SUCC " + message.messageType);
         }
     }
-
+    public  String getListOfAliveNodes() {
+        StringBuilder result = new StringBuilder();
+        for(String sTemp : chordList) {
+            sTemp = hashWithPortMap.get(sTemp);
+            result = result.append(sTemp).append(":");
+        }
+        return result.toString();
+    }
 /*
     public void notifyFoundPortMessage() {
         lock.notifyAll();
