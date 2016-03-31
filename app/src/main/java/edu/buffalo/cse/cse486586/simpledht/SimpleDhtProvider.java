@@ -87,6 +87,7 @@ public class SimpleDhtProvider extends ContentProvider {
         Log.e(TAG," hashCompare :" + hashKey.compareTo(predHash));
         Log.e(TAG," hashCompare :" + hashKey.compareTo(node_id));
 
+/*
         if (predHash.equalsIgnoreCase(succHash)) {
             Log.e(TAG,"predHash == succHash");
             if (hashKey.compareTo(predHash) >= 1 && hashKey.compareTo(succHash) >= 1) { // hashKey greater than both
@@ -94,6 +95,7 @@ public class SimpleDhtProvider extends ContentProvider {
                 return true;
             }
         }
+*/
         if (hashKey.compareTo(predHash) > 0 && hashKey.compareTo(node_id) <= 0) {
             return true;
         }
@@ -184,37 +186,7 @@ public class SimpleDhtProvider extends ContentProvider {
         Log.e("insert", values.toString());
         return uri;
     }
-    /*private void getPredAndSucc()  {
-        predAllInRing= new HashMap<String, String>();
-        succAllInRing= new HashMap<String, String>();
 
-        for(int i= 11124; i >= NODE_JOINER_PORT; i = i - 4) {
-            if (i == NODE_JOINER_PORT) {
-                predAllInRing.put(String.valueOf(i),"11124");
-                break;
-            }
-            predAllInRing.put(String.valueOf(i),String.valueOf(i-4));
-        }
-        Log.e(TAG,"predAllInRing ");
-        for(Map.Entry<String,String> entry : predAllInRing.entrySet()) {
-            Log.e(TAG," key " + entry.getKey() + " = " + entry.getValue());
-
-        }
-
-        for(Integer i = NODE_JOINER_PORT; i <= 11124; i = i+4) {
-            if (i == 11124) {
-                succAllInRing.put(String.valueOf(i),String.valueOf(NODE_JOINER_PORT));
-                break;
-            }
-            succAllInRing.put(String.valueOf(i),String.valueOf(i+4));
-
-        }
-        Log.e(TAG,"succAllInRing ");
-        for(Map.Entry<String,String> entry : succAllInRing.entrySet()) {
-            Log.e(TAG," key " + entry.getKey() + " = " + entry.getValue());
-
-        }
-    }*/
     private void sendAliveMessageToAVD0() {
         Log.e(TAG, "sendAliveMessageToAVD0 by " + myPort);
         String hash = genHash(String.valueOf(Integer.valueOf(myPort)/2));
