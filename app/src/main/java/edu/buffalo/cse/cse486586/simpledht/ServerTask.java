@@ -258,31 +258,11 @@ public class ServerTask extends AsyncTask<ServerSocket, String, Void> {
                             SimpleDhtProvider.queryDone = true;
                             SimpleDhtProvider.lock.notifyAll();
                         }
-                    } /*else if (message.messageType.equalsIgnoreCase(SimpleDhtProvider.DB_ROW_COUNT)) {
-                        Log.e(TAG,"DB_ROW_COUNT request from " + message.remotePort);
-                        Cursor c = SimpleDhtProvider.getInstance().returnLocalData(null);
-                        if (c == null ) {
-                            throw new Exception();
+                    } else if (message.messageType.equalsIgnoreCase(SimpleDhtProvider.DELETE_DATA)) {
+                        Log.e(TAG,"Delete request found from " + message.originPort + " selection parameter "  + message.key );
+                        SimpleDhtActivity.sql.deleteDataFromTable(message.key);
 
-                        }
-                        c.moveToFirst();
-                        message.key        = String.valueOf(c.getCount());
-                        Log.e(TAG,"DB rows count are " + message.key);
-                        message.remotePort = message.originPort;
-                        message.originPort = SimpleDhtProvider.myPort;
-                        message.messageType= SimpleDhtProvider.DB_ROW_COUNT_FOUND;
-                        c.close();
-                        SimpleDhtProvider.getInstance().sendMessageToRemotePort(message);
-                    }*/ //else if (message.messageType.equalsIgnoreCase(SimpleDhtProvider.DB_ROW_COUNT_FOUND)) {
-                      /*  Log.e(TAG,"DB_ROW_COUNT_FOUND from  " + message.originPort);
-                        SimpleDhtProvider.queryKey = message.key;
-                        synchronized (SimpleDhtProvider.lock) {
-                            SimpleDhtProvider.queryDone= true;
-                            SimpleDhtProvider.lock.notifyAll();
-                        }
-                    }*/ /*else if (message.messageType.equalsIgnoreCase(SimpleDhtProvider.DB_ROW)) {
-
-                    }*/
+                    }
 
                 } catch(SocketTimeoutException e) {
                     e.printStackTrace();

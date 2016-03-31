@@ -102,5 +102,22 @@ class SQLHelperClass extends  SQLiteOpenHelper{
         return c;
     }
 
+    /**
+     * Call this method when a specific row entry has to be deleted
+     * Pass null in parameter to delete entire table
+     * @param key
+     */
+    public int deleteDataFromTable(String key) {
+        int rowsAffected;
+        SQLiteDatabase db = this.getWritableDatabase();
+        if (key == null) {
+            rowsAffected = db.delete(DB_TABLE,null,null);
+        } else {
+            rowsAffected = db.delete(DB_TABLE,"key=?",new String[]{key});
+        }
+
+        return rowsAffected;
+    }
+
 }
 

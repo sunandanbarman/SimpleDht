@@ -24,13 +24,11 @@ public class SimpleDhtProvider extends ContentProvider {
     public static String TAG  = SimpleDhtProvider.class.getName();
 
     public static String predHash = "", succHash = ""; //String having hash(predPort) / hash(succPort)
-    private static Map<String,String> predAllInRing, succAllInRing; //TODO : Remove later; Contains list of <port,Pred> and <predWithHash,Succ>
     public static Set<String> msgSentForLookup;
     public static int predPort, succPort;
     private static String node_id = "";
     public static String myPort = "";
 
-    //public static String ACK = "ACK";
     public static String ALIVE        = "ALIVE";
     public static String NODE_ADDED   = "ADDED";
     public static String UPDATE_SUCC  = "UPDATE_SUCC";
@@ -44,14 +42,13 @@ public class SimpleDhtProvider extends ContentProvider {
     public static String ALIVE_NODES   = "ALIVE_NODES";
     public static String ALIVE_NODES_RESP = "ALIVE_NODES_RESP";
     public static String EMPTY         = "EMPTY";
-    public static String DB_ROW_COUNT  = "DB_ROW_COUNT";
-    public static String DB_ROW_COUNT_FOUND  = "DB_ROW_COUNT_FOUND";
+    public static String DELETE_DATA   = "DELETE_DATA";
 
     public static final int TIMEOUT          = 1000;
     public static final int MAX_MSG_LENGTH   = 4096; //HUGE: as the whole DB data is dumped  as a string
     public static final int SERVER_PORT      = 10000;
     public static final int NODE_JOINER_PORT = 11108;
-    //public static final int[] AVD_ID         = {5554,5556,5558,5560,5562};
+
     public static final int[] REMOTE_PORT    = {11108,11112,11116,11120,11124};
     public static SimpleDhtProvider singleInstance;
     public static Map<String,String> hashWithPortMap;
@@ -72,14 +69,12 @@ public class SimpleDhtProvider extends ContentProvider {
         String portStr = tel.getLine1Number().substring(tel.getLine1Number().length() - 4);
         return String.valueOf((Integer.parseInt(portStr) * 2));
     }
-    private static boolean isFirstNode() {
-        if (Integer.valueOf(myPort) < predPort) {
-            return true;
-        }
-        return false;
+    private static boolean isOnlyNodeInRing() {
+        return predHash.equalsIgnoreCase("") && succHash.equalsIgnoreCase("");
     }
+
     public static boolean doLookup(String hashKey) {
-        if (predHash.equals("") && succHash.equals("") ) {
+        if (isOnlyNodeInRing()) {
             Log.e(TAG,"No predecessor and successor, hence inserting within own provider");
             return true;
         }
@@ -87,15 +82,6 @@ public class SimpleDhtProvider extends ContentProvider {
         Log.e(TAG," hashCompare :" + hashKey.compareTo(predHash));
         Log.e(TAG," hashCompare :" + hashKey.compareTo(node_id));
 
-/*
-        if (predHash.equalsIgnoreCase(succHash)) {
-            Log.e(TAG,"predHash == succHash");
-            if (hashKey.compareTo(predHash) >= 1 && hashKey.compareTo(succHash) >= 1) { // hashKey greater than both
-                Log.e(TAG,"hashKey greater than both predHash and succHash");
-                return true;
-            }
-        }
-*/
         if (hashKey.compareTo(predHash) > 0 && hashKey.compareTo(node_id) <= 0) {
             return true;
         }
@@ -118,10 +104,77 @@ public class SimpleDhtProvider extends ContentProvider {
 
     }
     /*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%*/
+
+    /**
+     * The delete function which returns the ID of the row being deleted.
+     * TODO: Check what kind of return value we have to give
+     * Three kinds of parameter are handled
+     * 1. "@" --> delete all data from the local database
+     * 2. "*" --> delete local database, and pass on the request to successor
+     * 3. Key --> delete specific row from local database, and forward the same to successor
+     * @param uri
+     * @param selection
+     * @param selectionArgs
+     * @return
+     */
     @Override
     public int delete(Uri uri, String selection, String[] selectionArgs) {
         // TODO Auto-generated method stub
-        return 0;
+        Log.e(TAG,"selection " + selection);
+        int rowsAffected = 0;
+        Log.e(TAG,"delete uri " + uri + " selection " +  selection);
+        /**
+         * To prevent infinite routing,
+         */
+        if (selection.equalsIgnoreCase(SimpleDhtActivity.LDumpSelection)) {
+            //delete all rows from local database
+            Log.e(TAG,"LDump parameter. delete all rows from local DB");
+            rowsAffected = SimpleDhtActivity.sql.deleteDataFromTable(null);
+
+            return rowsAffected;
+        }
+
+        if (isOnlyNodeInRing()) {
+            Log.e(TAG,"only node in chord");
+            String key;
+            if (selection.equalsIgnoreCase(SimpleDhtActivity.GDumpSelection)) {
+                Log.e(TAG,"GDump parameter. delete all rows from local DB");
+                key = null;
+            }
+            else {
+                Log.e(TAG,"Not GDump, selection " + selection);
+                key = selection;
+            }
+            rowsAffected = SimpleDhtActivity.sql.deleteDataFromTable(key); //delete all rows from local database
+            Log.e(TAG,"rowsAffected P.2 "  + rowsAffected);
+            return rowsAffected;
+        }
+        String key ;
+        if (selection.equalsIgnoreCase(SimpleDhtActivity.GDumpSelection))
+            key = null;
+        else
+            key = selection;
+        rowsAffected = SimpleDhtActivity.sql.deleteDataFromTable(key);
+        //now forward to successor
+        Log.e(TAG, "DELETE :To ask " + NODE_JOINER_PORT + " for list of alive nodes ");
+        Message message = new Message(selection,"dummy","dummy",SimpleDhtProvider.ALIVE_NODES,myPort,String.valueOf(NODE_JOINER_PORT),"dummy","dummy");
+        new ClientTask().execute(message);
+        waitForResponse();
+        Log.e(TAG,"DELETE :list of alive nodes "+ SimpleDhtProvider.queryKey);
+        String[] aliveNodes = SimpleDhtProvider.queryKey.split(":");
+        for (String sAlivePort : aliveNodes) {
+            message.remotePort = sAlivePort;
+            message.originPort = myPort;
+            message.messageType= DELETE_DATA;
+            message.key        = selection; // get all data
+
+            new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,message);
+            //waitForResponse();
+        }
+        Log.e(TAG,"rowsAffected are :" + rowsAffected);
+
+        return rowsAffected;
+
     }
 
     @Override
@@ -129,6 +182,7 @@ public class SimpleDhtProvider extends ContentProvider {
         // TODO Auto-generated method stub
         return null;
     }
+
     public long insertIntoDatabase(ContentValues cv) {
         if (SimpleDhtActivity.sql.insertValues(cv) == -1) {
             Log.e(TAG, "Insertion into db failed for values :" + cv.toString());
@@ -311,8 +365,8 @@ public class SimpleDhtProvider extends ContentProvider {
             queryDone = false;
             Log.e(TAG,"Response of alive nodes " + SimpleDhtProvider.queryKey);
             String[] aliveNodes = SimpleDhtProvider.queryKey.split(":");
-            StringBuilder sKeyList = new StringBuilder();
-            StringBuilder sValList = new StringBuilder();
+            //StringBuilder sKeyList = new StringBuilder();
+            //StringBuilder sValList = new StringBuilder();
             for(String sAlivePort : aliveNodes) {
                 Log.e(TAG,"sAlive " + sAlivePort);
                 message.remotePort = sAlivePort;
